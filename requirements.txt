@@ -1,4 +1,4 @@
-
+tensorflow-cpu==2.15.0
 streamlit>=1.28.0
 ultralytics>=8.0.220
 opencv-python-headless>=4.8.0
