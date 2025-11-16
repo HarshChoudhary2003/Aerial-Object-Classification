@@ -10,42 +10,63 @@ from datetime import datetime
 import logging
 import io
 import tempfile
+import requests
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# YOLO path
+# Hugging Face Model URL (FREE HOSTING)
+YOLO_URL = "https://huggingface.co/HarshChoudhary2003/aerial-object-models/resolve/main/best.pt"
 YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
 
-# Max upload size
 MAX_FILE_SIZE_MB = 50
 
-# ------------------------------
-# YOLO MODEL LOADING
-# ------------------------------
+def get_model_status():
+    """Check if model is ready"""
+    exists = os.path.exists(YOLO_PATH)
+    return {
+        "ready": exists,
+        "name": "YOLOv8" if exists else "Downloading..."
+    }
+
+def download_model(url: str, path: str):
+    """Download model from Hugging Face if not exists"""
+    if os.path.exists(path):
+        return
+    
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    
+    # ENHANCED: Progress bar for download
+    response = requests.get(url, stream=True)
+    total_size = int(response.headers.get('content-length', 0))
+    
+    progress_bar = st.progress(0)
+    downloaded = 0
+    
+    with open(path, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+                downloaded += len(chunk)
+                progress = int(50 * downloaded / total_size)  # Scale to 50%
+                progress_bar.progress(progress)
+    
+    progress_bar.empty()
+
 @st.cache_resource(show_spinner=True)
 def load_detection_model() -> YOLO:
-    """Load YOLO model only."""
+    """Load YOLO model with auto-download"""
     try:
-        if not os.path.exists(YOLO_PATH):
-            st.error(
-                f"❌ YOLO model not found at:\n\n`{YOLO_PATH}`\n\n"
-                "Please upload the model file to this path in your repository."
-            )
-            st.stop()
-
-        logger.info(f"Loading YOLO model from {YOLO_PATH}")
+        download_model(YOLO_URL, YOLO_PATH)
+        logger.info(f"Loading YOLO from {YOLO_PATH}")
         return YOLO(YOLO_PATH)
 
     except Exception as e:
-        logger.error(f"YOLO loading error: {e}")
-        st.error(f"❌ Failed to load YOLO model: {str(e)}")
+        logger.error(f"YOLO error: {e}")
+        st.error(f"❌ Failed to load YOLO: {str(e)}")
         st.stop()
 
-# ------------------------------
-# IMAGE VALIDATION
-# ------------------------------
 def validate_image(image, max_size_mb=MAX_FILE_SIZE_MB):
     """Check size, dimensions, format."""
     try:
@@ -67,9 +88,6 @@ def validate_image(image, max_size_mb=MAX_FILE_SIZE_MB):
     except Exception as e:
         return False, f"Validation failed: {str(e)}"
 
-# ------------------------------
-# YOLO DETECTION
-# ------------------------------
 def predict_detection(model: YOLO, image, conf_threshold=0.5):
     """Run YOLO detection and return annotated image."""
     try:
@@ -80,7 +98,6 @@ def predict_detection(model: YOLO, image, conf_threshold=0.5):
         if not is_valid:
             raise ValueError(msg)
 
-        # Save to temp file (YOLO requires file path)
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             temp_path = tmp.name
             image.save(temp_path, quality=95)
@@ -110,9 +127,6 @@ def predict_detection(model: YOLO, image, conf_threshold=0.5):
             os.unlink(temp_path)
         raise Exception(f"Detection failed: {str(e)}")
 
-# ------------------------------
-# HISTORY FUNCTIONS
-# ------------------------------
 def add_to_history(filename: str, task: str, model: str, results: dict):
     """Save results in Streamlit session state."""
     if "history" not in st.session_state:
