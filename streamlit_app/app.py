@@ -1,22 +1,22 @@
 import streamlit as st
-import os
-import sys
 from PIL import Image
 import numpy as np
 import pandas as pd
-import plotly.express as px
-from datetime import datetime
 import io
+import os
+from datetime import datetime
 
-# FIXED: Remove sys.path, import directly
+# Import utilities
 from utils import (
     load_detection_model,
     predict_detection,
     validate_image,
     add_to_history,
-    get_analysis_history,
-    get_model_status
+    get_analysis_history
 )
+
+# Model path (defined here, not in utils)
+YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
 
 # Page Configuration
 st.set_page_config(
@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS (YOUR ORIGINAL DESIGN - UNCHANGED)
+# Custom CSS - YOUR ORIGINAL DESIGN (UNCHANGED)
 st.markdown("""
 <style>
     .main-header {
@@ -70,7 +70,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header (YOUR ORIGINAL DESIGN - UNCHANGED)
+# Header - YOUR ORIGINAL DESIGN (UNCHANGED)
 st.markdown("""
 <div class="main-header">
     <h1> Aerial Object Classification & Detection</h1>
@@ -78,18 +78,19 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar (YOUR ORIGINAL DESIGN - ENHANCED with status indicator)
+# Sidebar - YOUR ORIGINAL DESIGN (ENHANCED with status)
 with st.sidebar:
     st.header("⚙️ Configuration")
-
-    # ENHANCED: Model status indicator
-    model_status = get_model_status()
-    if model_status["ready"]:
-        st.success(f"✅ Model Ready\n`{model_status['name']}`")
-    else:
-        st.warning("⚠️ Model Downloading...")
-        with st.spinner("Downloading..."):
+    
+    # ENHANCED: Model status check
+    # Use isfile to ensure we're checking for the model file itself (not just a directory)
+    if not os.path.isfile(YOLO_PATH):
+        st.warning("⚠️ Model not found. Click button below to install.")
+        if st.button("📥 Install YOLO Model"):
             load_detection_model()
+            st.rerun()
+    else:
+        st.success("✅ YOLOv8 Model Ready")
 
     task = st.radio(
         "Select Task",
@@ -127,27 +128,20 @@ with st.sidebar:
 
     st.markdown("---")
 
-# Main Tabs (YOUR ORIGINAL DESIGN - ENHANCED with analytics)
+# Main Tabs - YOUR ORIGINAL DESIGN (UNCHANGED)
 tab1, tab2, tab3, tab4 = st.tabs(["🚀 Analyze", "📚 Guide", "📊 Comparison", "⚙️ Settings"])
 
 def process_single_image(uploaded_file, task, conf_threshold):
     """Process single image with progress tracking"""
     
-    # ENHANCED: Show image metadata
+    # Validate file size
     file_size_mb = uploaded_file.size / (1024 * 1024)
-    col_meta1, col_meta2 = st.columns(2)
-    with col_meta1:
-        st.info(f"📏 File: {uploaded_file.name}")
-    with col_meta2:
-        st.info(f"💾 Size: {file_size_mb:.1f}MB")
-
     if file_size_mb > 50:
         st.error(f"❌ File too large: {file_size_mb:.1f}MB (max: 50MB)")
         st.stop()
 
-    # Load image with progress bar
-    with st.spinner("Loading image..."):
-        image = Image.open(uploaded_file)
+    # Load image
+    image = Image.open(uploaded_file)
 
     is_valid, msg = validate_image(image)
     if not is_valid:
@@ -157,60 +151,40 @@ def process_single_image(uploaded_file, task, conf_threshold):
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        # ENHANCED: Show dimensions
-        st.image(image, use_column_width=True, 
-                caption=f"Original: {image.size[0]}×{image.size[1]}px")
+        st.image(image, use_column_width=True, caption=f"Original: {image.size}")
 
     results = {}
 
     # --- CLASSIFICATION DISABLED ---
     if task == "📊 Classification Only":
-        st.warning("⚠️ Classification is disabled on Streamlit Cloud (TensorFlow not supported)")
+        st.warning("⚠️ Classification is disabled on Streamlit Cloud")
 
     # --- DETECTION ---
     if task in ["🎯 Detection Only", "🔮 Both Tasks"]:
         with col2:
-            # ENHANCED: Progress bar
-            progress_bar = st.progress(0)
-            for i in range(100):
-                progress_bar.progress(i + 1, text="🔍 Analyzing image...")
+            with st.spinner("🔍 Running detection..."):
+                model = load_detection_model()
+                result_image, num_detections = predict_detection(model, image, conf_threshold)
 
-            model = load_detection_model()
-            result_image, num_detections = predict_detection(model, image, conf_threshold)
+                st.image(result_image, use_column_width=True,
+                         caption=f"Detection: {num_detections} objects")
 
-            progress_bar.empty()  # Clear progress bar
+                if num_detections > 0:
+                    st.success(f"✅ Detected {num_detections} objects")
+                else:
+                    st.warning("⚠️ No objects detected")
 
-            st.image(result_image, use_column_width=True,
-                     caption=f"Detection: {num_detections} objects")
-
-            # ENHANCED: Result cards
-            if num_detections > 0:
-                st.markdown(f"""
-                <div class="drone-card result-card">
-                    <h3>✅ Detection Complete</h3>
-                    <p><strong>{num_detections}</strong> objects detected with confidence ≥ {conf_threshold}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div class="info-box">
-                    <h4>⚠️ No Objects Detected</h4>
-                    <p>Try lowering the confidence threshold or check image quality.</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-            results['detection'] = {'count': num_detections}
+                results['detection'] = {'count': num_detections}
 
     # History
     add_to_history(uploaded_file.name, task, "YOLOv8", results)
 
-    # ENHANCED: Download button with size info
+    # Download
     if 'result_image' in locals():
         buf = io.BytesIO()
         Image.fromarray(result_image).save(buf, format='JPEG')
-        buf_size = len(buf.getvalue()) / 1024
         st.download_button(
-            label=f"📥 Download Processed Image ({buf_size:.1f}KB)",
+            label="📥 Download Processed Image",
             data=buf.getvalue(),
             file_name=f"detected_{uploaded_file.name}",
             mime="image/jpeg"
@@ -244,40 +218,23 @@ with tab2:
     """)
 
 # ---------------- TAB 3 ----------------
-# ENHANCED: Analytics Dashboard
 with tab3:
-    st.header("📊 Detection Analytics Dashboard")
+    st.header("📊 Model Performance Comparison")
+    st.info("📌 Classification metrics are disabled. Only YOLO detection is available.")
     
     history_df = get_analysis_history()
-    
     if not history_df.empty:
-        # Key metrics
-        col1, col2, col3, col4 = st.columns(4)
+        total_images = len(history_df)
+        total_detections = history_df['detections'].sum()
+        avg_detections = history_df['detections'].mean()
+        
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Images", len(history_df))
+            st.metric("Images Processed", total_images)
         with col2:
-            st.metric("Total Detections", history_df['detections'].sum())
+            st.metric("Total Detections", total_detections)
         with col3:
-            st.metric("Avg per Image", f"{history_df['detections'].mean():.1f}")
-        with col4:
-            st.metric("Success Rate", f"{(history_df['detections'] > 0).mean():.0%}")
-        
-        # ENHANCED: Interactive chart
-        st.subheader("Detection History")
-        fig = px.line(
-            history_df, 
-            x='timestamp', 
-            y='detections',
-            title='Detections Over Time',
-            markers=True
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Recent history table
-        st.subheader("Recent Analysis")
-        st.dataframe(history_df.tail(10), use_container_width=True)
-    else:
-        st.info("No analysis history yet. Start by uploading an image!")
+            st.metric("Avg Detections/Image", f"{avg_detections:.1f}")
 
 # ---------------- TAB 4 ----------------
 with tab4:
@@ -294,27 +251,11 @@ with tab4:
         st.success("✅ YOLOv8 Model Ready")
         st.info("⚠️ Classification Unavailable")
 
-    # ENHANCED: Cache management
-    col3, col4 = st.columns(2)
-    with col3:
-        if st.button("🗑️ Clear Cache & History"):
-            st.cache_resource.clear()
-            if 'history' in st.session_state:
-                st.session_state.history = []
-            st.success("✅ Cache cleared!")
-            st.rerun()
-    
-    with col4:
-        if st.button("📊 Export History"):
-            history_df = get_analysis_history()
-            if not history_df.empty:
-                csv = history_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download CSV",
-                    data=csv,
-                    file_name=f"aerial_analysis_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
-                )
+    if st.button("🗑️ Clear Cache & History"):
+        st.cache_resource.clear()
+        if 'history' in st.session_state:
+            st.session_state.history = []
+        st.success("✅ Cache cleared!")
 
 st.markdown("---")
 st.markdown("""

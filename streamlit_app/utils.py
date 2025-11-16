@@ -16,43 +16,26 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Hugging Face Model URL (FREE HOSTING)
+# FIXED: Hugging Face URL - Replace with YOUR username
 YOLO_URL = "https://huggingface.co/HarshChoudhary2003/aerial-object-models/resolve/main/best.pt"
 YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
 
 MAX_FILE_SIZE_MB = 50
 
-def get_model_status():
-    """Check if model is ready"""
-    exists = os.path.exists(YOLO_PATH)
-    return {
-        "ready": exists,
-        "name": "YOLOv8" if exists else "Downloading..."
-    }
-
 def download_model(url: str, path: str):
-    """Download model from Hugging Face if not exists"""
+    """Download model from Hugging Face"""
     if os.path.exists(path):
         return
     
     os.makedirs(os.path.dirname(path), exist_ok=True)
     
-    # ENHANCED: Progress bar for download
-    response = requests.get(url, stream=True)
-    total_size = int(response.headers.get('content-length', 0))
-    
-    progress_bar = st.progress(0)
-    downloaded = 0
-    
-    with open(path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
+    with st.spinner("⬇️ Downloading YOLO model (first run only)... This may take 1-2 minutes."):
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        with open(path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-                downloaded += len(chunk)
-                progress = int(50 * downloaded / total_size)  # Scale to 50%
-                progress_bar.progress(progress)
-    
-    progress_bar.empty()
 
 @st.cache_resource(show_spinner=True)
 def load_detection_model() -> YOLO:
