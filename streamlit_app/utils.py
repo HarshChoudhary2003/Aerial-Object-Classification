@@ -12,7 +12,7 @@ import logging
 import io
 import tempfile
 import urllib.request
-import gzip
+import time
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -30,13 +30,21 @@ MODEL_PATHS = {
 
 YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
 
-# MODEL DOWNLOAD URLs (REPLACE THESE WITH YOUR ACTUAL MODEL URLs)
-# You can upload your models to Google Drive, Dropbox, or any direct download service
-# and replace the URLs below. The URLs must be direct download links.
+# ⚠️ CRITICAL: REPLACE THESE WITH YOUR ACTUAL MODEL URLs
+# The placeholders below point to YOLO models for demonstration.
+# You MUST upload your actual .h5 and .pt files to a file host.
+# Use direct download links (Google Drive: ?export=download, Dropbox: ?dl=1, Hugging Face: raw link)
 MODEL_URLS = {
-    "ResNet50 Transfer Learning": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",  # PLACEHOLDER
-    "Custom CNN": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",  # PLACEHOLDER
-    "YOLOv8": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"  # PLACEHOLDER
+    "ResNet50 Transfer Learning": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",  # ❌ PLACEHOLDER - REPLACE!
+    "Custom CNN": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",  # ❌ PLACEHOLDER - REPLACE!
+    "YOLOv8": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"  # ✅ This one is OK for YOLO
+}
+
+# Expected minimum file sizes in MB (adjust based on your actual models)
+EXPECTED_SIZES = {
+    "ResNet50 Transfer Learning": 80,
+    "Custom CNN": 10,
+    "YOLOv8": 20
 }
 
 # File size limit (MB)
@@ -45,74 +53,145 @@ MAX_FILE_SIZE_MB = 50
 def ensure_models_available():
     """
     Ensure all required models are available locally.
-    If not present, download them from the specified URLs.
-    This is the key function for easy deployment.
+    Downloads models if missing or corrupted, with verification and retry logic.
     """
     # Create directories
     os.makedirs("models/classification", exist_ok=True)
     os.makedirs("models/detection/aerial_detection/weights", exist_ok=True)
     
-    # Check and download classification models
-    for model_name, file_path in MODEL_PATHS.items():
-        if not os.path.exists(file_path):
-            st.warning(f"🔄 Downloading {model_name}... (one-time setup)")
-            url = MODEL_URLS.get(model_name)
-            if url:
-                try:
-                    download_model(url, file_path, model_name)
-                    st.success(f"✅ {model_name} downloaded successfully")
-                except Exception as e:
-                    st.error(f"❌ Failed to download {model_name}: {e}")
-                    st.stop()
-            else:
-                st.error(f"❌ No download URL configured for {model_name}. Please update MODEL_URLS in utils.py")
-                st.stop()
+    # Define models to check
+    models_to_check = {
+        "ResNet50 Transfer Learning": {
+            "path": MODEL_PATHS["ResNet50 Transfer Learning"],
+            "url": MODEL_URLS.get("ResNet50 Transfer Learning"),
+            "min_size_mb": EXPECTED_SIZES["ResNet50 Transfer Learning"]
+        },
+        "Custom CNN": {
+            "path": MODEL_PATHS["Custom CNN"],
+            "url": MODEL_URLS.get("Custom CNN"),
+            "min_size_mb": EXPECTED_SIZES["Custom CNN"]
+        },
+        "YOLOv8": {
+            "path": YOLO_PATH,
+            "url": MODEL_URLS.get("YOLOv8"),
+            "min_size_mb": EXPECTED_SIZES["YOLOv8"]
+        }
+    }
     
-    # Check and download YOLO model
-    if not os.path.exists(YOLO_PATH):
-        st.warning("🔄 Downloading YOLOv8 Detection Model... (one-time setup)")
-        url = MODEL_URLS.get("YOLOv8")
-        if url:
+    # Check each model
+    for model_name, config in models_to_check.items():
+        path = config["path"]
+        url = config["url"]
+        min_size_mb = config["min_size_mb"]
+        
+        # Check if model exists and is valid
+        is_valid = verify_model_file(path, min_size_mb)
+        
+        if not is_valid:
+            if not url or "placeholder" in url.lower():
+                st.error(f"❌ **CRITICAL**: No valid URL configured for `{model_name}`")
+                st.error(f"Please update `MODEL_URLS` in `utils.py` with a direct download link.")
+                st.stop()
+            
+            # Delete corrupted file if it exists
+            if os.path.exists(path):
+                st.warning(f"⚠️ Removing corrupted file: {os.path.basename(path)}")
+                os.remove(path)
+            
+            # Download with retry
+            st.info(f"⬇️ Downloading {model_name} (~{min_size_mb}MB)...")
             try:
-                download_model(url, YOLO_PATH, "YOLOv8 Detection")
-                st.success("✅ YOLOv8 model downloaded successfully")
+                download_model_with_retry(url, path, model_name, min_size_mb)
+                st.success(f"✅ {model_name} ready")
             except Exception as e:
-                st.error(f"❌ Failed to download YOLOv8: {e}")
+                st.error(f"❌ Failed to download {model_name} after multiple attempts: {e}")
                 st.stop()
         else:
-            st.error("❌ No download URL configured for YOLOv8. Please update MODEL_URLS in utils.py")
-            st.stop()
+            logger.info(f"✅ {model_name} verified at {path}")
 
-def download_model(url: str, destination: str, model_name: str):
+def verify_model_file(path: str, min_size_mb: int) -> bool:
     """
-    Download a model file with progress bar
+    Verify model file exists and meets minimum size requirement.
+    Also performs a basic format check.
+    """
+    if not os.path.exists(path):
+        return False
     
-    Args:
-        url: Direct download URL for the model
-        destination: Local path to save the model
-        model_name: Name of the model for display
-    """
+    size_mb = os.path.getsize(path) / (1024 * 1024)
+    
+    # Size check
+    if size_mb < min_size_mb:
+        logger.warning(f"File {path} too small: {size_mb:.1f}MB (min: {min_size_mb}MB)")
+        return False
+    
+    # Format check (basic)
     try:
-        with st.spinner(f"Downloading {model_name}..."):
-            # Download with progress
-            def download_progress(block_num, block_size, total_size):
-                downloaded = block_num * block_size
-                percent = min(downloaded * 100 / total_size, 100)
-                st.progress(percent / 100, f"Downloading... {percent:.1f}%")
+        with open(path, 'rb') as f:
+            header = f.read(8)
             
-            # For Streamlit Cloud, we need to handle the download differently
-            # Using urllib with a progress hook
+            # Check for HDF5 format (Keras models)
+            if path.endswith('.h5') and not header.startswith(b'\x89HDF\r\n\x1a\n'):
+                logger.error(f"File {path} is not a valid HDF5 format")
+                return False
+            
+            # Check for PyTorch format (YOLO models)
+            if path.endswith('.pt') and not header.startswith(b'PK'):
+                logger.error(f"File {path} is not a valid PyTorch model")
+                return False
+    except Exception as e:
+        logger.error(f"Cannot verify file {path}: {e}")
+        return False
+    
+    return True
+
+def download_model_with_retry(url: str, destination: str, model_name: str, min_size_mb: int, max_retries: int = 3):
+    """
+    Download model with progress bar, integrity checks, and retry logic.
+    """
+    for attempt in range(max_retries):
+        try:
+            # Progress tracking
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            def download_progress(block_num, block_size, total_size):
+                if total_size > 0:
+                    percent = min((block_num * block_size * 100) / total_size, 100)
+                    progress_bar.progress(percent / 100)
+                    status_text.text(f"📥 Downloading {model_name}... {percent:.1f}%")
+            
+            # Download
             urllib.request.urlretrieve(url, destination, reporthook=download_progress)
             
-            # Verify file was downloaded and has content
-            if os.path.exists(destination) and os.path.getsize(destination) > 0:
-                logger.info(f"Successfully downloaded {model_name} to {destination}")
+            # Verify download
+            actual_size_mb = os.path.getsize(destination) / (1024 * 1024)
+            
+            if actual_size_mb < min_size_mb * 0.5:  # File is less than 50% of expected size
+                raise Exception(f"File too small: {actual_size_mb:.1f}MB (expected ~{min_size_mb}MB). Likely corrupted or incomplete.")
+            
+            # Verify file format
+            if not verify_model_file(destination, min_size_mb):
+                raise Exception("Downloaded file format is invalid")
+            
+            progress_bar.empty()
+            status_text.text(f"✅ {model_name} download complete: {actual_size_mb:.1f} MB")
+            time.sleep(1)  # Brief pause for user to see success message
+            progress_bar.empty()
+            status_text.empty()
+            
+            return
+            
+        except Exception as e:
+            progress_bar.empty()
+            status_text.empty()
+            
+            if attempt < max_retries - 1:
+                st.warning(f"⚠️ Attempt {attempt + 1} failed: {str(e)[:50]}... Retrying in 3s...")
+                time.sleep(3)
+                if os.path.exists(destination):
+                    os.remove(destination)
             else:
-                raise Exception(f"Downloaded file is empty or missing: {destination}")
-                
-    except Exception as e:
-        logger.error(f"Download error for {model_name}: {e}")
-        raise Exception(f"Failed to download {model_name}: {str(e)}")
+                raise Exception(f"Download failed after {max_retries} attempts. Last error: {e}")
 
 def get_model_metrics() -> pd.DataFrame:
     """Returns model performance metrics with actual paths verification"""
@@ -127,83 +206,68 @@ def get_model_metrics() -> pd.DataFrame:
         'Model Exists': [False, False]
     }).set_index('Model')
     
-    # Check if models exist
+    # Check if models exist and are valid
     for model_name in MODEL_PATHS.keys():
         file_key = 'ResNet50 Transfer' if model_name == "ResNet50 Transfer Learning" else 'Custom CNN'
         file_path = MODEL_PATHS[model_name]
-        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            metrics.loc[file_key, 'Model Exists'] = True
+        is_valid = verify_model_file(file_path, EXPECTED_SIZES[model_name])
+        metrics.loc[file_key, 'Model Exists'] = is_valid
     
     return metrics
 
 @st.cache_resource(show_spinner=True)
-def load_classification_model(model_name: ModelType = "ResNet50 Transfer Learning") -> tf.keras.Model:
+def load_classification_model(model_name: ModelType = "ResNet50 Transfer Learning"):
     """Load and cache classification model with error handling"""
     try:
-        # Map display name to file path
-        if model_name not in MODEL_PATHS:
-            raise ValueError(f"Unknown model: {model_name}")
-        
         path = MODEL_PATHS[model_name]
         
-        # Double-check model exists (should be handled by ensure_models_available)
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            error_msg = f"""
-            ### ❌ Model Not Found: {model_name}
-            
-            **Expected:** `{path}`
-            
-            **Solutions:**
-            1. The model should have been downloaded automatically. Check the logs above.
-            2. Verify the download URL in `MODEL_URLS` is correct and accessible.
-            3. Manually upload the model file to the expected path.
-            """
-            st.error(error_msg)
-            logger.error(f"Model file missing or empty: {path}")
-            st.stop()
+        # Verify model file before loading
+        if not verify_model_file(path, EXPECTED_SIZES[model_name]):
+            raise ValueError(f"Model file invalid or corrupted: {path}")
         
         logger.info(f"Loading {model_name} from {path}")
         
-        # Load model
+        # Load model - use compile=False first, then compile manually for stability
         model = tf.keras.models.load_model(path, compile=False)
         model.compile(
             optimizer='adam',
             loss='binary_crossentropy',
-            metrics=['accuracy', 'Precision', 'Recall']
+            metrics=['accuracy']
         )
         return model
         
     except Exception as e:
-        logger.error(f"Model loading error: {e}")
-        st.error(f"❌ Failed to load model: {str(e)}")
+        logger.error(f"Model loading error for {model_name}: {e}")
+        st.error(f"❌ Failed to load model `{model_name}`: {str(e)}")
+        st.error("**This usually means the file is corrupted.** The app will attempt to re-download on next run.")
+        
+        # Delete corrupted file so it re-downloads next time
+        if os.path.exists(MODEL_PATHS[model_name]):
+            os.remove(MODEL_PATHS[model_name])
+        
         st.stop()
 
 @st.cache_resource(show_spinner=True)
-def load_detection_model() -> YOLO:
+def load_detection_model():
     """Load and cache YOLOv8 model with validation"""
     try:
-        # Double-check YOLO model exists
-        if not os.path.exists(YOLO_PATH) or os.path.getsize(YOLO_PATH) == 0:
-            error_msg = f"""
-            ### ❌ YOLOv8 Model Not Found
-            
-            **Expected:** `{YOLO_PATH}`
-            
-            **Solutions:**
-            1. Wait for the automatic download to complete (check logs above).
-            2. Update the `MODEL_URLS['YOLOv8']` in utils.py with a direct download link.
-            3. Manually upload the model to the specified path.
-            """
-            st.error(error_msg)
-            logger.error(f"YOLO model file missing or empty: {YOLO_PATH}")
-            st.stop()
+        # Verify model file before loading
+        if not verify_model_file(YOLO_PATH, EXPECTED_SIZES["YOLOv8"]):
+            raise ValueError(f"YOLO model file invalid or corrupted: {YOLO_PATH}")
         
         logger.info(f"Loading YOLOv8 from {YOLO_PATH}")
+        
+        # Force CPU for stability in cloud environments
         return YOLO(YOLO_PATH)
         
     except Exception as e:
         logger.error(f"YOLO loading error: {e}")
-        st.error(f"❌ Failed to load YOLO: {str(e)}")
+        st.error(f"❌ Failed to load YOLO model: {str(e)}")
+        
+        # Delete corrupted file so it re-downloads next time
+        if os.path.exists(YOLO_PATH):
+            os.remove(YOLO_PATH)
+        
         st.stop()
 
 def validate_image(image: ImageType, max_size_mb: int = MAX_FILE_SIZE_MB) -> Tuple[bool, str]:
@@ -282,13 +346,13 @@ def predict_detection(model: YOLO, image: ImageType, conf_threshold: float = 0.5
             temp_path = tmp.name
             image.save(temp_path, quality=95)
         
-        # Run inference
+        # Run inference on CPU (force for cloud stability)
         results = model.predict(
             source=temp_path,
             save=False,
             conf=conf_threshold,
             verbose=False,
-            device='cpu'  # Force CPU for stability in cloud deployment
+            device='cpu'
         )
         
         # Clean up
