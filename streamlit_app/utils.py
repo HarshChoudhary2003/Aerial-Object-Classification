@@ -1,9 +1,9 @@
+import streamlit as st
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 import cv2
 import os
-import streamlit as st
 import pandas as pd
 from typing import Tuple, Union
 from datetime import datetime
@@ -15,23 +15,23 @@ import tempfile
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Only YOLO model will be used (TensorFlow removed)
+# YOLO path
 YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
 
 # Max upload size
 MAX_FILE_SIZE_MB = 50
-
 
 # ------------------------------
 # YOLO MODEL LOADING
 # ------------------------------
 @st.cache_resource(show_spinner=True)
 def load_detection_model() -> YOLO:
-    """Load YOLO model only. TF removed completely."""
+    """Load YOLO model only."""
     try:
         if not os.path.exists(YOLO_PATH):
             st.error(
-                f"❌ YOLO model not found at:\n\n`{YOLO_PATH}`"
+                f"❌ YOLO model not found at:\n\n`{YOLO_PATH}`\n\n"
+                "Please upload the model file to this path in your repository."
             )
             st.stop()
 
@@ -42,7 +42,6 @@ def load_detection_model() -> YOLO:
         logger.error(f"YOLO loading error: {e}")
         st.error(f"❌ Failed to load YOLO model: {str(e)}")
         st.stop()
-
 
 # ------------------------------
 # IMAGE VALIDATION
@@ -67,7 +66,6 @@ def validate_image(image, max_size_mb=MAX_FILE_SIZE_MB):
 
     except Exception as e:
         return False, f"Validation failed: {str(e)}"
-
 
 # ------------------------------
 # YOLO DETECTION
@@ -112,7 +110,6 @@ def predict_detection(model: YOLO, image, conf_threshold=0.5):
             os.unlink(temp_path)
         raise Exception(f"Detection failed: {str(e)}")
 
-
 # ------------------------------
 # HISTORY FUNCTIONS
 # ------------------------------
@@ -128,7 +125,6 @@ def add_to_history(filename: str, task: str, model: str, results: dict):
         "model": model,
         "detections": results.get("detection", {}).get("count", 0)
     })
-
 
 def get_analysis_history() -> pd.DataFrame:
     """Return history as a DataFrame."""

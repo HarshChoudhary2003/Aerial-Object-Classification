@@ -8,15 +8,14 @@ import plotly.express as px
 from datetime import datetime
 import io
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
+# FIXED: Add YOLO_PATH to imports
 from utils import (
     load_detection_model,
     predict_detection,
     validate_image,
     add_to_history,
-    get_analysis_history
+    get_analysis_history,
+    YOLO_PATH  # THIS WAS MISSING!
 )
 
 # Page Configuration
@@ -27,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS (YOUR ORIGINAL DESIGN)
 st.markdown("""
 <style>
     .main-header {
@@ -71,7 +70,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header
+# Header (YOUR ORIGINAL DESIGN)
 st.markdown("""
 <div class="main-header">
     <h1> Aerial Object Classification & Detection</h1>
@@ -79,20 +78,16 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar (YOUR ORIGINAL DESIGN)
 with st.sidebar:
     st.header("⚙️ Configuration")
 
     task = st.radio(
         "Select Task",
         ["📊 Classification Only", "🎯 Detection Only", "🔮 Both Tasks"],
-        help="Choose what analysis to perform on uploaded images"
+        help="Choose what analysis to perform on uploaded images",
+        index=1
     )
-
-    # Classification removed → Message only
-    if task != "🎯 Detection Only":
-        st.info("Classification is disabled (TensorFlow not supported on Streamlit Cloud).")
-        model_type = None
 
     conf_threshold = st.slider(
         "Detection Confidence",
@@ -112,7 +107,7 @@ with st.sidebar:
         - Automatic quality checks
         
         **2. AI Model Analysis**
-        - **Detection Only** available
+        - **Detection Only** available on Streamlit Cloud
         - YOLOv8 draws bounding boxes
         
         **3. Results & Visualization**
@@ -123,10 +118,10 @@ with st.sidebar:
 
     st.markdown("---")
 
-# Main Tabs
+# Main Tabs (YOUR ORIGINAL DESIGN)
 tab1, tab2, tab3, tab4 = st.tabs(["🚀 Analyze", "📚 Guide", "📊 Comparison", "⚙️ Settings"])
 
-def process_single_image(uploaded_file, task, model_type, conf_threshold):
+def process_single_image(uploaded_file, task, conf_threshold):
     """Process single image with progress tracking"""
     
     # Validate file size
@@ -151,8 +146,8 @@ def process_single_image(uploaded_file, task, model_type, conf_threshold):
     results = {}
 
     # --- CLASSIFICATION DISABLED ---
-    if task in ["📊 Classification Only", "🔮 Both Tasks"]:
-        st.warning("Classification is disabled because TensorFlow cannot run on Streamlit Cloud.")
+    if task == "📊 Classification Only":
+        st.warning("⚠️ Classification is disabled on Streamlit Cloud")
 
     # --- DETECTION ---
     if task in ["🎯 Detection Only", "🔮 Both Tasks"]:
@@ -172,7 +167,7 @@ def process_single_image(uploaded_file, task, model_type, conf_threshold):
                 results['detection'] = {'count': num_detections}
 
     # History
-    add_to_history(uploaded_file.name, task, "YOLO Only", results)
+    add_to_history(uploaded_file.name, task, "YOLOv8", results)
 
     # Download
     if 'result_image' in locals():
@@ -196,42 +191,61 @@ with tab1:
     )
 
     if uploaded_file:
-        process_single_image(uploaded_file, task, model_type, conf_threshold)
+        process_single_image(uploaded_file, task, conf_threshold)
 
 # ---------------- TAB 2 ----------------
 with tab2:
     st.header("📚 Detailed User Guide")
     st.markdown("""
-    ### **Getting Started**
-    1. Upload your image
-    2. Choose Detection task
-    3. Review output with bounding boxes
+    ### **Quick Start**
+    1. **Upload** an aerial image
+    2. **Select Detection** task
+    3. **Adjust confidence** threshold
+    4. **View** bounding boxes
+    5. **Download** results
+    
+    **Note:** Classification is disabled on Streamlit Cloud due to TensorFlow incompatibility.
     """)
 
 # ---------------- TAB 3 ----------------
 with tab3:
-    st.header("📊 Model Performance Dashboard")
-    st.info("Classification metrics are disabled since TensorFlow is removed.")
-    st.warning("Only YOLO detection is available in this deployment environment.")
+    st.header("📊 Model Performance Comparison")
+    st.info("📌 Classification metrics are disabled. Only YOLO detection is available.")
+    
+    history_df = get_analysis_history()
+    if not history_df.empty:
+        total_images = len(history_df)
+        total_detections = history_df['detections'].sum()
+        avg_detections = history_df['detections'].mean()
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Images Processed", total_images)
+        with col2:
+            st.metric("Total Detections", total_detections)
+        with col3:
+            st.metric("Avg Detections/Image", f"{avg_detections:.1f}")
 
 # ---------------- TAB 4 ----------------
 with tab4:
     st.header("⚙️ Application Settings")
+    
     col1, col2 = st.columns(2)
-
+    
     with col1:
-        st.subheader("Model Paths")
-        st.text_input("Detection Path", "models/detection/")
-
+        st.subheader("Model Path")
+        st.text_input("YOLO Model Path", YOLO_PATH, disabled=True)
+    
     with col2:
-        st.subheader("Advanced Settings")
-        st.checkbox("Enable GPU", value=False)
-        st.checkbox("Debug Mode", value=False)
+        st.subheader("System Status")
+        st.success("✅ YOLOv8 Model Ready")
+        st.info("⚠️ Classification Unavailable")
 
     if st.button("🗑️ Clear Cache & History"):
         st.cache_resource.clear()
-        st.session_state.history = []
-        st.success("✅ Cache cleared")
+        if 'history' in st.session_state:
+            st.session_state.history = []
+        st.success("✅ Cache cleared!")
 
 st.markdown("---")
 st.markdown("""

@@ -1,10 +1,7 @@
-streamlit==1.30.0
-numpy==1.26.4
-pandas==2.1.4
-pillow==10.2.0
-matplotlib==3.8.2
-plotly==5.18.0
-psutil==5.9.8
-
-opencv-python-headless==4.7.0.72
-ultralytics-lite==0.0.24
+streamlit>=1.28.0
+ultralytics>=8.0.220
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+pandas>=2.1.0
+plotly>=5.17.0
