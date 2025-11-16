@@ -15,10 +15,10 @@ from utils import (
     get_analysis_history
 )
 
-# Model path (defined here, not in utils)
+# Model path
 YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
 
-# Page Configuration
+# Page Configuration - YOUR DESIGN
 st.set_page_config(
     page_title="AerialSurveillance AI",
     page_icon="🛰️",
@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS - YOUR ORIGINAL DESIGN (UNCHANGED)
+# Custom CSS - YOUR DESIGN (UNCHANGED)
 st.markdown("""
 <style>
     .main-header {
@@ -70,7 +70,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header - YOUR ORIGINAL DESIGN (UNCHANGED)
+# Header - YOUR DESIGN (UNCHANGED)
 st.markdown("""
 <div class="main-header">
     <h1> Aerial Object Classification & Detection</h1>
@@ -78,19 +78,18 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar - YOUR ORIGINAL DESIGN (ENHANCED with status)
+# Sidebar - YOUR DESIGN (ENHANCED)
 with st.sidebar:
     st.header("⚙️ Configuration")
-    
-    # ENHANCED: Model status check
-    # Use isfile to ensure we're checking for the model file itself (not just a directory)
-    if not os.path.isfile(YOLO_PATH):
-        st.warning("⚠️ Model not found. Click button below to install.")
-        if st.button("📥 Install YOLO Model"):
+
+    # Model status indicator
+    if not os.path.exists(YOLO_PATH):
+        st.warning("⚠️ Model not found")
+        if st.button("📥 Install Model"):
             load_detection_model()
             st.rerun()
     else:
-        st.success("✅ YOLOv8 Model Ready")
+        st.success("✅ YOLOv8 Ready")
 
     task = st.radio(
         "Select Task",
@@ -128,19 +127,17 @@ with st.sidebar:
 
     st.markdown("---")
 
-# Main Tabs - YOUR ORIGINAL DESIGN (UNCHANGED)
+# Main Tabs - YOUR DESIGN (UNCHANGED)
 tab1, tab2, tab3, tab4 = st.tabs(["🚀 Analyze", "📚 Guide", "📊 Comparison", "⚙️ Settings"])
 
 def process_single_image(uploaded_file, task, conf_threshold):
-    """Process single image with progress tracking"""
+    """Process single image"""
     
-    # Validate file size
     file_size_mb = uploaded_file.size / (1024 * 1024)
     if file_size_mb > 50:
         st.error(f"❌ File too large: {file_size_mb:.1f}MB (max: 50MB)")
         st.stop()
 
-    # Load image
     image = Image.open(uploaded_file)
 
     is_valid, msg = validate_image(image)
