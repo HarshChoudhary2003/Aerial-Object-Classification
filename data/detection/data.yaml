@@ -1,0 +1,8 @@
+names:
+- bird
+- drone
+nc: 2
+path: D:\Aerial_Object_Detection\data\detection
+test: test/images
+train: train/images
+val: valid/images
