@@ -1,4 +1,4 @@
-import tensorflow as tf
+# utils.py
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
@@ -11,6 +11,7 @@ from datetime import datetime
 import logging
 import io
 import tempfile
+import tflite_runtime.interpreter as tflite  # NEW: TFLite
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -20,10 +21,10 @@ logger = logging.getLogger(__name__)
 ModelType = str
 ImageType = Union[Image.Image, np.ndarray]
 
-# Model paths mapping
+# UPDATED: Model paths mapping (now .tflite)
 MODEL_PATHS = {
-    "ResNet50 Transfer Learning": "models/classification/transfer_resnet50_best.h5",
-    "Custom CNN": "models/classification/custom_cnn_best.h5"
+    "ResNet50 Transfer Learning": "models/classification/transfer_resnet50_best.tflite",
+    "Custom CNN": "models/classification/custom_cnn_best.tflite"
 }
 
 YOLO_PATH = "models/detection/aerial_detection/weights/best.pt"
@@ -54,10 +55,9 @@ def get_model_metrics() -> pd.DataFrame:
     return metrics
 
 @st.cache_resource(show_spinner=True)
-def load_classification_model(model_name: ModelType = "ResNet50 Transfer Learning") -> tf.keras.Model:
-    """Load and cache classification model with error handling"""
+def load_classification_model(model_name: ModelType = "ResNet50 Transfer Learning"):
+    """Load and cache TFLite classification model"""
     try:
-        # Map display name to file path
         if model_name not in MODEL_PATHS:
             raise ValueError(f"Unknown model: {model_name}")
         
@@ -69,24 +69,17 @@ def load_classification_model(model_name: ModelType = "ResNet50 Transfer Learnin
             
             **Expected:** `{path}`
             
-            **Solutions:**
-            1. Train models via notebook: `notebooks/main.ipynb`
-            2. Verify model files exist in `models/classification/`
-            3. Check folder structure matches documentation
+            **Did you run `python convert_models.py`?**
             """
             st.error(error_msg)
             st.stop()
         
-        logger.info(f"Loading {model_name} from {path}")
+        logger.info(f"Loading TFLite model {model_name} from {path}")
         
-        # Load model
-        model = tf.keras.models.load_model(path, compile=False)
-        model.compile(
-            optimizer='adam',
-            loss='binary_crossentropy',
-            metrics=['accuracy', 'Precision', 'Recall']
-        )
-        return model
+        # Load TFLite model
+        interpreter = tflite.Interpreter(model_path=path)
+        interpreter.allocate_tensors()
+        return interpreter
         
     except Exception as e:
         logger.error(f"Model loading error: {e}")
@@ -102,13 +95,6 @@ def load_detection_model() -> YOLO:
             ### ❌ YOLOv8 Model Not Found
             
             **Expected:** `{YOLO_PATH}`
-            
-            **Training Command:**
-            ```bash
-            yolo task=detect mode=train model=yolov8n.pt 
-            data=data/detection/data.yaml epochs=100 imgsz=640 
-            batch=16 project=models/detection name=aerial_detection
-            ```
             """
             st.error(error_msg)
             st.stop()
@@ -155,10 +141,10 @@ def preprocess_image(image: Image.Image, target_size: Tuple[int, int] = (224, 22
         image = image.convert('RGB')
     
     img_array = np.array(image.resize(target_size)) / 255.0
-    return np.expand_dims(img_array, axis=0)
+    return np.expand_dims(img_array, axis=0).astype(np.float32)  # TFLite needs float32
 
-def predict_classification(model: tf.keras.Model, image: ImageType) -> Tuple[str, float]:
-    """Predict bird vs drone with confidence"""
+def predict_classification(model, image: ImageType) -> Tuple[str, float]:
+    """Predict bird vs drone with confidence using TFLite"""
     try:
         if isinstance(image, np.ndarray):
             image = Image.fromarray(image)
@@ -169,7 +155,14 @@ def predict_classification(model: tf.keras.Model, image: ImageType) -> Tuple[str
             raise ValueError(msg)
         
         processed = preprocess_image(image)
-        prediction = model.predict(processed, verbose=0)[0][0]
+        
+        # TFLite inference
+        input_details = model.get_input_details()
+        output_details = model.get_output_details()
+        
+        model.set_tensor(input_details[0]['index'], processed)
+        model.invoke()
+        prediction = model.get_tensor(output_details[0]['index'])[0][0]
         
         label = "DRONE" if prediction > 0.5 else "BIRD"
         confidence = prediction if prediction > 0.5 else 1 - prediction
@@ -203,7 +196,7 @@ def predict_detection(model: YOLO, image: ImageType, conf_threshold: float = 0.5
             save=False,
             conf=conf_threshold,
             verbose=False,
-            device='cpu'  # Force CPU for stability
+            device='cpu'
         )
         
         # Clean up
