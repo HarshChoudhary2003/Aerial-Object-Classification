@@ -142,8 +142,6 @@ Aerial-Object-Classification/
 ✅ **Model Comparison**: Interactive performance dashboard  
 ✅ **Results Export**: Download processed images  
 ✅ **Analysis History**: Track all previous analyses  
-✅ **GPU/CPU Support**: Automatic hardware detection  
-✅ **Mobile Responsive**: Works on all devices  
 
 ---
 
