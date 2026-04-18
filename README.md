@@ -25,6 +25,21 @@ A production-ready AI system that leverages **TensorFlow** and **YOLOv8** to acc
 
 ---
 
+## 🚀 **Quick Start**
+
+To get the application running in "Powerful Full Working Condition" on your local machine:
+
+1. **Setup Environment**: Run the automated setup script to create a virtual environment and install all dependencies.
+   ```powershell
+   .\setup.ps1
+   ```
+2. **Launch Application**: Use the run script to start the Streamlit dashboard.
+   ```powershell
+   .\run.ps1
+   ```
+
+---
+
 ## 🚀 **Live Demo**
 
 **[🎬 Launch Streamlit App →](https://aerial-surveillance-ai.streamlit.app)**
