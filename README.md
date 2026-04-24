@@ -80,9 +80,6 @@ graph TD
     U --> W[custom_cnn_best.h5]
     U --> X[transfer_resnet50_best.h5]
 
-    V --> Y[aerial_detection/]
-    Y --> Z[weights/]
-    Z --> AA[best.pt]
 
     D --> AB[main.ipynb]
 
