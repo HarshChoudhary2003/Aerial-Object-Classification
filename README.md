@@ -136,9 +136,10 @@ graph TD
     end
     
     subgraph Deployment
-        G --> I[streamlit_app/app.py]
+        G --> I[backend/app/main.py]
         H --> I
-        I -->|Render| J((Web Dashboard))
+        I -->|API| J[frontend/src/App.jsx]
+        J -->|Render| K((Web Dashboard))
     end
 
     classDef dataLayer fill:#3776AB,stroke:#fff,stroke-width:2px,color:#fff;
@@ -149,7 +150,7 @@ graph TD
     class A,B,C,D dataLayer;
     class E,F modelLayer;
     class G,H outputLayer;
-    class I,J deployLayer;
+    class I,J,K deployLayer;
 ```
 
 <details>
@@ -157,18 +158,28 @@ graph TD
 
 ```text
 Aerial-Object-Classification/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── services/
+│   │   └── main.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── services/
+│   │   ├── styles/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   └── package.json
 ├── data/
-│   ├── classification/ (TRAIN/VALID/TEST for Birds & Drones)
-│   └── detection/ (train/valid/test images & YOLO labels)
+│   ├── classification/
+│   └── detection/
 ├── models/
-│   ├── classification/ (Custom CNN & ResNet50 .h5 weights)
-│   └── detection/ (YOLOv8 best.pt & last.pt weights)
+│   ├── classification/
+│   └── detection/
 ├── notebooks/
-│   └── main.ipynb
-├── streamlit_app/
-│   ├── app.py
-│   └── utils.py
-├── requirements.txt
 ├── setup.ps1
 ├── run.ps1
 └── README.md

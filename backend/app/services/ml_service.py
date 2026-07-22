@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Model paths mapping
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 MODEL_PATHS = {
     "resnet50": os.path.join(BASE_DIR, "models/classification/transfer_resnet50_final.h5"),
     "cnn": os.path.join(BASE_DIR, "models/classification/custom_cnn_best.h5")
