@@ -1,12 +1,22 @@
 # Aerial-Object-Classification Run Script
-Write-Host "🛰 Launching Aerial Surveillance AI..." -ForegroundColor Cyan
+Write-Host "Launching Aerial Surveillance AI System..." -ForegroundColor Cyan
 
-# Activate Virtual Environment
-if (Test-Path -Path "venv") {
-    .\venv\Scripts\Activate.ps1
-} else {
-    Write-Host "⚠️ Virtual environment not found. Running with global python..." -ForegroundColor Yellow
+# Start Backend in background
+Write-Host "Starting FastAPI Backend..." -ForegroundColor Yellow
+$BackendJob = Start-Job {
+    Set-Location $using:PWD
+    if (Test-Path -Path "venv") {
+        .\venv\Scripts\Activate.ps1
+    }
+    cd backend
+    ..\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 }
 
-# Run Streamlit
-streamlit run streamlit_app/app.py
+# Start Frontend
+Write-Host "Starting React Frontend..." -ForegroundColor Yellow
+Set-Location frontend
+npm run dev
+
+# Cleanup jobs if frontend is closed
+Stop-Job $BackendJob
+Remove-Job $BackendJob
