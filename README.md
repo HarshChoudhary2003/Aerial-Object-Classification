@@ -5,14 +5,13 @@
 
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-8.0-00FFFF?style=for-the-badge&logo=yolo&logoColor=black)](https://ultralytics.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.28-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![React](https://img.shields.io/badge/React-18.x-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 
 *A production-ready AI system built for critical applications in security surveillance, wildlife protection, and airspace safety.*
 
 <br />
-
-**[🎬 Launch Live Streamlit App →](https://aerial-surveillance-ai.streamlit.app)**
 
 ---
 
@@ -56,7 +55,7 @@ Get the application running in **Powerful Full Working Condition** on your local
 # 1. Setup Environment (Installs dependencies & virtual env)
 .\setup.ps1
 
-# 2. Launch the AI Dashboard
+# 2. Launch the AI Dashboard (Frontend & Backend)
 .\run.ps1
 ```
 
@@ -82,7 +81,8 @@ Get the application running in **Powerful Full Working Condition** on your local
 | :--- | :--- | :--- |
 | **Deep Learning Framework** | TensorFlow & Keras | Custom CNN & ResNet50 Transfer Learning |
 | **Object Detection** | Ultralytics YOLOv8 | High-speed spatial localization |
-| **Frontend UI** | Streamlit | Rapid, interactive data app deployment |
+| **Frontend UI** | React & Vite | Responsive, component-based web interface |
+| **Backend API** | FastAPI | High-performance async Python backend |
 | **Data Processing** | OpenCV & NumPy | Image augmentation and array manipulation |
 | **Visualization** | Matplotlib & Seaborn | Training metrics and confusion matrices |
 
